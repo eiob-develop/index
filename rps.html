@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>✊ 가위바위보</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    color: #ecf0f1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    user-select: none;
+  }
+  .top-bar {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .home-btn {
+    color: #94a3b8;
+    text-decoration: none;
+    font-size: 14px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    background: rgba(255,255,255,.05);
+    transition: background .2s, color .2s;
+  }
+  .home-btn:hover { background: rgba(255,255,255,.1); color: #3498db; }
+
+  h1 { font-size: 28px; color: #3498db; }
+
+  .scoreboard {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .score-box {
+    background: #1e293b;
+    padding: 12px 22px;
+    border-radius: 10px;
+    text-align: center;
+    min-width: 90px;
+  }
+  .score-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+  .score-value { font-size: 24px; font-weight: bold; }
+  .score-box.win .score-value { color: #2ecc71; }
+  .score-box.lose .score-value { color: #e74c3c; }
+  .score-box.draw .score-value { color: #f1c40f; }
+  .score-box.streak .score-value { color: #3498db; }
+
+  .arena {
+    display: flex;
+    gap: 40px;
+    align-items: center;
+    margin: 30px 0 10px;
+  }
+  .player-side { text-align: center; }
+  .player-label {
+    font-size: 13px;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+  .pick {
+    width: 140px;
+    height: 140px;
+    background: #1e293b;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 70px;
+    border: 3px solid #283447;
+  }
+  .pick.shake { animation: shake .5s ease; }
+  @keyframes shake {
+    0%, 100% { transform: translateY(0) rotate(0); }
+    25% { transform: translateY(-15px) rotate(-8deg); }
+    75% { transform: translateY(15px) rotate(8deg); }
+  }
+  .vs {
+    font-size: 28px;
+    font-weight: bold;
+    color: #94a3b8;
+  }
+
+  .result {
+    font-size: 22px;
+    font-weight: bold;
+    min-height: 50px;
+    margin: 14px 0;
+    text-align: center;
+    padding: 0 20px;
+  }
+  .result.win { color: #2ecc71; }
+  .result.lose { color: #e74c3c; }
+  .result.draw { color: #f1c40f; }
+
+  .choices {
+    display: flex;
+    gap: 16px;
+    margin-top: 14px;
+  }
+  .choice-btn {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    font-size: 50px;
+    border: 3px solid #3498db;
+    background: #1e293b;
+    color: white;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .choice-btn:hover {
+    background: #3498db;
+    transform: scale(1.08);
+  }
+  .choice-btn:active { transform: scale(0.95); }
+  .choice-btn:disabled { opacity: 0.5; cursor: wait; }
+
+  .reset-btn {
+    margin-top: 24px;
+    background: transparent;
+    color: #94a3b8;
+    border: 1px solid #94a3b8;
+    padding: 8px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .reset-btn:hover { color: #e74c3c; border-color: #e74c3c; }
+
+  @media (max-width: 600px) {
+    .arena { gap: 20px; }
+    .pick { width: 110px; height: 110px; font-size: 56px; }
+    .choice-btn { width: 80px; height: 80px; font-size: 40px; }
+  }
+</style>
+</head>
+<body>
+  <div class="top-bar">
+    <a href="index.html" class="home-btn">← 홈</a>
+    <h1>✊ 가위바위보</h1>
+    <div style="width: 40px;"></div>
+  </div>
+
+  <div class="scoreboard">
+    <div class="score-box win">
+      <div class="score-label">승</div>
+      <div class="score-value" id="wins">0</div>
+    </div>
+    <div class="score-box lose">
+      <div class="score-label">패</div>
+      <div class="score-value" id="losses">0</div>
+    </div>
+    <div class="score-box draw">
+      <div class="score-label">무</div>
+      <div class="score-value" id="draws">0</div>
+    </div>
+    <div class="score-box streak">
+      <div class="score-label">연승</div>
+      <div class="score-value" id="streak">0</div>
+    </div>
+  </div>
+
+  <div class="arena">
+    <div class="player-side">
+      <div class="player-label">나</div>
+      <div class="pick" id="playerPick">❔</div>
+    </div>
+    <div class="vs">VS</div>
+    <div class="player-side">
+      <div class="player-label">컴퓨터</div>
+      <div class="pick" id="computerPick">❔</div>
+    </div>
+  </div>
+
+  <div class="result" id="result">선택하세요!</div>
+
+  <div class="choices">
+    <button class="choice-btn" data-choice="rock" title="바위">✊</button>
+    <button class="choice-btn" data-choice="paper" title="보">✋</button>
+    <button class="choice-btn" data-choice="scissors" title="가위">✌️</button>
+  </div>
+
+  <button class="reset-btn" id="reset">기록 초기화</button>
+
+<script>
+const EMOJI = { rock: '✊', paper: '✋', scissors: '✌️' };
+const NAMES = { rock: '바위', paper: '보', scissors: '가위' };
+const CHOICES = ['rock', 'paper', 'scissors'];
+
+let stats = JSON.parse(localStorage.getItem('rps-stats') || '{"wins":0,"losses":0,"draws":0,"streak":0,"bestStreak":0}');
+
+const $playerPick = document.getElementById('playerPick');
+const $computerPick = document.getElementById('computerPick');
+const $result = document.getElementById('result');
+const $wins = document.getElementById('wins');
+const $losses = document.getElementById('losses');
+const $draws = document.getElementById('draws');
+const $streak = document.getElementById('streak');
+const $buttons = document.querySelectorAll('.choice-btn');
+
+function updateStats() {
+  $wins.textContent = stats.wins;
+  $losses.textContent = stats.losses;
+  $draws.textContent = stats.draws;
+  $streak.textContent = stats.streak;
+  localStorage.setItem('rps-stats', JSON.stringify(stats));
+}
+
+function play(playerChoice) {
+  $buttons.forEach(b => b.disabled = true);
+  const computerChoice = CHOICES[Math.floor(Math.random() * 3)];
+
+  $playerPick.textContent = '❔';
+  $computerPick.textContent = '❔';
+  $playerPick.classList.add('shake');
+  $computerPick.classList.add('shake');
+  $result.textContent = '...';
+  $result.className = 'result';
+
+  setTimeout(() => {
+    $playerPick.classList.remove('shake');
+    $computerPick.classList.remove('shake');
+    $playerPick.textContent = EMOJI[playerChoice];
+    $computerPick.textContent = EMOJI[computerChoice];
+
+    if (playerChoice === computerChoice) {
+      $result.textContent = `🤝 무승부 (${NAMES[playerChoice]})`;
+      $result.classList.add('draw');
+      stats.draws++;
+    } else if (
+      (playerChoice === 'rock' && computerChoice === 'scissors') ||
+      (playerChoice === 'paper' && computerChoice === 'rock') ||
+      (playerChoice === 'scissors' && computerChoice === 'paper')
+    ) {
+      $result.textContent = `🎉 승리! ${NAMES[playerChoice]} > ${NAMES[computerChoice]}`;
+      $result.classList.add('win');
+      stats.wins++;
+      stats.streak++;
+      if (stats.streak > stats.bestStreak) stats.bestStreak = stats.streak;
+    } else {
+      $result.textContent = `💥 패배! ${NAMES[computerChoice]} > ${NAMES[playerChoice]}`;
+      $result.classList.add('lose');
+      stats.losses++;
+      stats.streak = 0;
+    }
+    updateStats();
+    $buttons.forEach(b => b.disabled = false);
+  }, 500);
+}
+
+$buttons.forEach(btn => {
+  btn.addEventListener('click', () => play(btn.dataset.choice));
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+  if (confirm('전적을 초기화하시겠습니까?')) {
+    stats = { wins: 0, losses: 0, draws: 0, streak: 0, bestStreak: 0 };
+    updateStats();
+    $playerPick.textContent = '❔';
+    $computerPick.textContent = '❔';
+    $result.textContent = '선택하세요!';
+    $result.className = 'result';
+  }
+});
+
+updateStats();
+</script>
+</body>
+</html>

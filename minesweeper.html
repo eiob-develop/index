@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>지뢰찾기</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #2c3e50, #4a6278);
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    color: #ecf0f1;
+    padding: 20px;
+    user-select: none;
+  }
+  h1 { margin: 0 0 12px; font-size: 28px; letter-spacing: 1px; }
+
+  .panel {
+    background: #34495e;
+    padding: 14px 20px;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .panel label { font-size: 13px; opacity: .9; }
+  .panel select, .panel button {
+    background: #1abc9c;
+    color: white;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .panel select { background: #2c3e50; border: 1px solid #1abc9c; }
+  .panel button:hover { background: #16a085; }
+
+  .stats {
+    display: flex;
+    gap: 18px;
+    background: #1f2d3d;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-family: 'Consolas', monospace;
+    font-size: 18px;
+    font-weight: bold;
+  }
+  .stats span { color: #f1c40f; }
+
+  #board {
+    display: grid;
+    gap: 2px;
+    background: #1f2d3d;
+    padding: 6px;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  .cell {
+    width: 30px;
+    height: 30px;
+    background: #95a5a6;
+    border: 2px solid;
+    border-color: #ecf0f1 #7f8c8d #7f8c8d #ecf0f1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+    color: #2c3e50;
+    transition: background .1s;
+  }
+  .cell:hover:not(.opened):not(.flag) { background: #bdc3c7; }
+  .cell.opened {
+    background: #ecf0f1;
+    border: 1px solid #bdc3c7;
+    cursor: default;
+  }
+  .cell.mine { background: #e74c3c !important; color: black; }
+  .cell.flag { color: #c0392b; }
+  .cell.wrong { background: #f39c12 !important; }
+
+  .c1 { color: #2980b9; }
+  .c2 { color: #27ae60; }
+  .c3 { color: #c0392b; }
+  .c4 { color: #8e44ad; }
+  .c5 { color: #d35400; }
+  .c6 { color: #16a085; }
+  .c7 { color: #2c3e50; }
+  .c8 { color: #7f8c8d; }
+
+  #message {
+    margin-top: 14px;
+    font-size: 20px;
+    font-weight: bold;
+    min-height: 28px;
+  }
+  .win { color: #2ecc71; }
+  .lose { color: #e74c3c; }
+
+  .hint { margin-top: 8px; font-size: 12px; opacity: .7; }
+
+  .home-btn {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    color: #94a3b8;
+    text-decoration: none;
+    font-size: 14px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    background: rgba(255,255,255,.05);
+    transition: background .2s, color .2s;
+    z-index: 10;
+  }
+  .home-btn:hover { background: rgba(255,255,255,.1); color: #1abc9c; }
+</style>
+</head>
+<body>
+  <a href="index.html" class="home-btn">← 홈</a>
+  <h1>💣 지뢰찾기</h1>
+
+  <div class="panel">
+    <label>난이도</label>
+    <select id="difficulty">
+      <option value="easy">쉬움 (9x9, 10)</option>
+      <option value="medium" selected>보통 (16x16, 40)</option>
+      <option value="hard">어려움 (30x16, 99)</option>
+    </select>
+    <button id="newGame">새 게임</button>
+    <div class="stats">
+      🚩 <span id="mineCount">0</span> &nbsp;|&nbsp; ⏱ <span id="timer">0</span>s
+    </div>
+  </div>
+
+  <div id="board"></div>
+  <div id="message"></div>
+  <div class="hint">좌클릭: 열기 | 우클릭: 깃발 | 숫자칸 더블클릭(또는 양쪽클릭): 주변 자동 열기</div>
+
+<script>
+const DIFFS = {
+  easy:   { rows: 9,  cols: 9,  mines: 10 },
+  medium: { rows: 16, cols: 16, mines: 40 },
+  hard:   { rows: 16, cols: 30, mines: 99 },
+};
+
+let rows, cols, totalMines;
+let board = [];
+let opened, flagged, mine;
+let gameOver = false;
+let firstClick = true;
+let openedCount = 0;
+let flagCount = 0;
+let timerInterval = null;
+let seconds = 0;
+
+const $board = document.getElementById('board');
+const $mineCount = document.getElementById('mineCount');
+const $timer = document.getElementById('timer');
+const $message = document.getElementById('message');
+const $diff = document.getElementById('difficulty');
+
+document.getElementById('newGame').addEventListener('click', newGame);
+$diff.addEventListener('change', newGame);
+
+function newGame() {
+  const d = DIFFS[$diff.value];
+  rows = d.rows; cols = d.cols; totalMines = d.mines;
+  board = Array.from({length: rows}, () => Array(cols).fill(0));
+  opened = Array.from({length: rows}, () => Array(cols).fill(false));
+  flagged = Array.from({length: rows}, () => Array(cols).fill(false));
+  mine = Array.from({length: rows}, () => Array(cols).fill(false));
+  gameOver = false;
+  firstClick = true;
+  openedCount = 0;
+  flagCount = 0;
+  seconds = 0;
+  $message.textContent = '';
+  $message.className = '';
+  $mineCount.textContent = totalMines;
+  $timer.textContent = '0';
+  clearInterval(timerInterval);
+  render();
+}
+
+function placeMines(safeR, safeC) {
+  let placed = 0;
+  while (placed < totalMines) {
+    const r = Math.floor(Math.random() * rows);
+    const c = Math.floor(Math.random() * cols);
+    if (mine[r][c]) continue;
+    if (Math.abs(r - safeR) <= 1 && Math.abs(c - safeC) <= 1) continue;
+    mine[r][c] = true;
+    placed++;
+  }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (mine[r][c]) { board[r][c] = -1; continue; }
+      let n = 0;
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = r+dr, nc = c+dc;
+          if (nr>=0 && nr<rows && nc>=0 && nc<cols && mine[nr][nc]) n++;
+        }
+      board[r][c] = n;
+    }
+  }
+}
+
+function render() {
+  $board.style.gridTemplateColumns = `repeat(${cols}, 30px)`;
+  $board.innerHTML = '';
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      if (opened[r][c]) {
+        cell.classList.add('opened');
+        if (mine[r][c]) {
+          cell.classList.add('mine');
+          cell.textContent = '💣';
+        } else if (board[r][c] > 0) {
+          cell.textContent = board[r][c];
+          cell.classList.add('c' + board[r][c]);
+        }
+      } else if (flagged[r][c]) {
+        cell.classList.add('flag');
+        cell.textContent = '🚩';
+      }
+      cell.addEventListener('click', onLeftClick);
+      cell.addEventListener('contextmenu', onRightClick);
+      cell.addEventListener('dblclick', onDoubleClick);
+      $board.appendChild(cell);
+    }
+  }
+}
+
+function startTimer() {
+  timerInterval = setInterval(() => {
+    seconds++;
+    $timer.textContent = seconds;
+  }, 1000);
+}
+
+function onLeftClick(e) {
+  if (gameOver) return;
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  if (flagged[r][c] || opened[r][c]) return;
+  if (firstClick) {
+    placeMines(r, c);
+    firstClick = false;
+    startTimer();
+  }
+  reveal(r, c);
+  finishMove();
+}
+
+function onRightClick(e) {
+  e.preventDefault();
+  if (gameOver) return;
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  if (opened[r][c]) return;
+  flagged[r][c] = !flagged[r][c];
+  flagCount += flagged[r][c] ? 1 : -1;
+  $mineCount.textContent = totalMines - flagCount;
+  render();
+}
+
+function onDoubleClick(e) {
+  if (gameOver || firstClick) return;
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  if (!opened[r][c] || board[r][c] <= 0) return;
+  let flags = 0;
+  const neighbors = [];
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = r+dr, nc = c+dc;
+      if (nr>=0 && nr<rows && nc>=0 && nc<cols) {
+        if (flagged[nr][nc]) flags++;
+        else if (!opened[nr][nc]) neighbors.push([nr, nc]);
+      }
+    }
+  if (flags === board[r][c]) {
+    for (const [nr, nc] of neighbors) reveal(nr, nc);
+    finishMove();
+  }
+}
+
+function reveal(r, c) {
+  if (r<0 || r>=rows || c<0 || c>=cols) return;
+  if (opened[r][c] || flagged[r][c]) return;
+  opened[r][c] = true;
+  openedCount++;
+  if (mine[r][c]) {
+    gameOver = true;
+    return;
+  }
+  if (board[r][c] === 0) {
+    for (let dr = -1; dr <= 1; dr++)
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        reveal(r+dr, c+dc);
+      }
+  }
+}
+
+function finishMove() {
+  if (gameOver) {
+    revealAllMines();
+    render();
+    clearInterval(timerInterval);
+    $message.textContent = '💥 게임 오버!';
+    $message.className = 'lose';
+    return;
+  }
+  if (openedCount === rows * cols - totalMines) {
+    gameOver = true;
+    clearInterval(timerInterval);
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        if (mine[r][c] && !flagged[r][c]) {
+          flagged[r][c] = true;
+          flagCount++;
+        }
+    $mineCount.textContent = 0;
+    $message.textContent = `🎉 승리! (${seconds}초)`;
+    $message.className = 'win';
+  }
+  render();
+}
+
+function revealAllMines() {
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (mine[r][c]) opened[r][c] = true;
+    }
+}
+
+newGame();
+</script>
+</body>
+</html>
