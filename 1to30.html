@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚡ 1-30 빠르게 — 미니게임</title>
+<style>
+  :root {
+    --bg-deep: #0a0d12;
+    --bg-surface: #10151c;
+    --bg-cell-cleared: #070a0e;
+    --accent: #f39c12;
+    --accent-glow: rgba(243,156,18,0.45);
+    --accent-dim: #7a4f0a;
+    --text-primary: #e8d9b8;
+    --text-muted: #5a6470;
+    --text-meta: #8a9099;
+    --danger: #ff3b30;
+    --success: #00d97a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'JetBrains Mono', 'IBM Plex Mono', 'Fira Code',
+                 Consolas, 'Liberation Mono', Menlo, monospace;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    min-height: 100vh;
+    background-image:
+      repeating-linear-gradient(
+        180deg, transparent 0 3px,
+        rgba(255,255,255,0.012) 3px 4px
+      ),
+      radial-gradient(ellipse at center,
+        transparent 40%, rgba(0,0,0,0.6) 100%);
+    overflow-x: hidden;
+  }
+  .top-bar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(243,156,18,0.12);
+  }
+  .home-link {
+    color: var(--text-meta);
+    text-decoration: none;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: color .2s;
+  }
+  .home-link:hover { color: var(--accent); }
+
+  .top-bar { flex-wrap: wrap; }
+  .hud-label, .hud-time {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-meta);
+    font-variant-numeric: tabular-nums;
+  }
+  .hud-label b, .hud-time b {
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .hud-time b { font-size: 14px; }
+  .hud-best { margin-left: auto; }
+  @keyframes pulseText {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+  #next-label b { animation: pulseText 0.9s ease-in-out infinite; }
+
+  .game-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px 60px;
+    gap: 12px;
+  }
+  .grid-meta-top {
+    color: var(--accent-dim);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    align-self: flex-end;
+    max-width: 600px;
+    width: 100%;
+    text-align: right;
+    padding-right: 8px;
+  }
+  .grid-frame {
+    position: relative;
+    padding: 28px 28px 28px 36px;
+    border: 1px solid rgba(243,156,18,0.15);
+    background: var(--bg-surface);
+  }
+  .col-labels, .row-labels {
+    position: absolute;
+    color: var(--accent-dim);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+  .col-labels {
+    top: 8px;
+    left: 36px;
+    right: 28px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    text-align: center;
+  }
+  .row-labels {
+    left: 8px;
+    top: 28px;
+    bottom: 28px;
+    display: grid;
+    grid-template-rows: repeat(6, 1fr);
+    align-items: center;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(5, clamp(56px, 13vw, 88px));
+    grid-template-rows: repeat(6, clamp(56px, 13vw, 88px));
+    gap: 6px;
+  }
+  .cell {
+    background: var(--bg-surface);
+    border: 1px solid rgba(243,156,18,0.18);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: clamp(22px, 5vw, 38px);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    transition: background .12s, border-color .12s, color .12s;
+  }
+  .corner {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-color: var(--accent);
+    border-style: solid;
+    pointer-events: none;
+  }
+  .corner.tl { top: -1px; left: -1px;     border-width: 1px 0 0 1px; }
+  .corner.tr { top: -1px; right: -1px;    border-width: 1px 1px 0 0; }
+  .corner.bl { bottom: -1px; left: -1px;  border-width: 0 0 1px 1px; }
+  .corner.br { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+
+  .cell.cleared {
+    background: var(--bg-cell-cleared);
+    border-color: rgba(255,255,255,0.04);
+    color: var(--accent-dim);
+    cursor: default;
+  }
+  .cell.cleared::after {
+    content: '✓';
+    font-size: 0.4em;
+    color: var(--accent-dim);
+  }
+  .cell.cleared > .digit { display: none; }
+
+  @keyframes pulseGlow {
+    0%, 100% {
+      box-shadow: 0 0 0 1px var(--accent), 0 0 6px var(--accent-glow);
+    }
+    50% {
+      box-shadow: 0 0 0 1px var(--accent), 0 0 22px var(--accent-glow);
+    }
+  }
+  .cell.next {
+    border-color: var(--accent);
+    color: var(--accent);
+    animation: pulseGlow 0.9s ease-in-out infinite;
+  }
+
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,59,48,0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    animation: fadeIn 0.2s ease;
+  }
+  .modal.success { background: rgba(0,217,122,0.08); }
+  .modal-card {
+    background: var(--bg-deep);
+    border: 1px solid var(--danger);
+    padding: 32px 40px;
+    text-align: center;
+    min-width: 280px;
+    max-width: 90vw;
+  }
+  .modal.success .modal-card { border-color: var(--accent); }
+  .modal-tag {
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--danger);
+    margin-bottom: 16px;
+  }
+  .modal.success .modal-tag { color: var(--success); }
+  .modal-title {
+    font-size: clamp(22px, 5vw, 36px);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+  }
+  .modal-meta {
+    font-size: 12px;
+    color: var(--text-meta);
+    letter-spacing: 0.08em;
+    margin-bottom: 24px;
+  }
+  .modal-time {
+    font-size: clamp(48px, 10vw, 72px);
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    margin: 8px 0 4px;
+    line-height: 1;
+  }
+  .modal-time-unit {
+    font-size: 14px;
+    color: var(--text-meta);
+    letter-spacing: 0.2em;
+  }
+  .modal-record {
+    margin-top: 12px;
+    color: var(--accent);
+    font-size: 14px;
+    letter-spacing: 0.1em;
+  }
+  .modal-btn {
+    margin-top: 20px;
+    background: transparent;
+    border: 1px solid var(--text-muted);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: border-color .2s, color .2s;
+  }
+  .modal-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%      { transform: translateX(-4px); }
+    40%      { transform: translateX(4px); }
+    60%      { transform: translateX(-3px); }
+    80%      { transform: translateX(3px); }
+  }
+  .grid-frame.shaking { animation: shake 0.4s ease; }
+
+  @keyframes blinkOrange {
+    0%, 100% { opacity: 1; }
+    25%, 75% { opacity: 0.2; }
+  }
+  .blink { animation: blinkOrange 0.6s ease-in-out 2; }
+
+  @keyframes sweep {
+    from { box-shadow: inset 0 0 0 0 var(--accent-glow); }
+    to   { box-shadow: inset 0 0 80px 0 rgba(243,156,18,0.18); }
+  }
+  .grid-frame.sweep { animation: sweep 0.6s ease-out; }
+
+  @keyframes cellBoot {
+    from { opacity: 0; transform: translateY(2px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .cell.boot { animation: cellBoot 0.18s ease backwards; }
+
+  @keyframes cellFlash {
+    0%   { background: #ffffff; }
+    100% { background: var(--bg-cell-cleared); }
+  }
+  .cell.flash { animation: cellFlash 0.18s ease forwards; }
+
+  @keyframes screenFlash {
+    0%, 100% { background-color: transparent; }
+    20%      { background-color: rgba(243,156,18,0.04); }
+  }
+  .screen-flash {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+  }
+  .screen-flash.active { animation: screenFlash 0.3s ease; }
+
+  @media (max-width: 600px) {
+    .top-bar {
+      gap: 12px;
+      padding: 10px 14px;
+      font-size: 11px;
+    }
+    .hud-best { margin-left: 0; }
+    .grid-meta-top { display: none; }
+    .col-labels, .row-labels { display: none; }
+    .grid-frame {
+      padding: 16px;
+    }
+    .grid {
+      grid-template-columns: repeat(5, minmax(48px, 1fr));
+      grid-template-rows: repeat(6, minmax(48px, auto));
+    }
+    .cell { font-size: clamp(20px, 6vw, 32px); }
+    .modal-card { padding: 24px 24px; }
+  }
+
+  body { touch-action: manipulation; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cell.boot,
+    .cell.flash,
+    .cell.next,
+    .grid-frame.shaking,
+    .grid-frame.sweep,
+    .screen-flash.active,
+    .blink,
+    #next-label b {
+      animation: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <a href="index.html" class="home-link">← HOME</a>
+  <span class="hud-label" id="status">// SYSTEM ARMED</span>
+  <span class="hud-label" id="next-label" hidden>// NEXT: <b id="next-num">01</b></span>
+  <span class="hud-time">T+ <b id="time">00.00</b></span>
+  <span class="hud-label hud-best">// BEST: <b id="best">--.--</b></span>
+</div>
+
+<main class="game-area">
+  <div class="grid-meta-top">// GRID 5×6</div>
+  <div class="grid-frame">
+    <div class="col-labels">
+      <span>A</span><span>B</span><span>C</span><span>D</span><span>E</span>
+    </div>
+    <div class="row-labels">
+      <span>01</span><span>02</span><span>03</span><span>04</span>
+      <span>05</span><span>06</span>
+    </div>
+    <div class="grid" id="grid">
+      <!-- 30 cells injected by JS -->
+    </div>
+    <span class="corner tl"></span>
+    <span class="corner tr"></span>
+    <span class="corner bl"></span>
+    <span class="corner br"></span>
+  </div>
+</main>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-card" id="modal-card">
+    <span class="modal-tag" id="modal-tag">// FAULT DETECTED</span>
+    <h2 class="modal-title" id="modal-title">[!] SEQUENCE BREACH</h2>
+    <p class="modal-meta" id="modal-meta">EXPECTED: -- · RECEIVED: --</p>
+    <button class="modal-btn" id="modal-btn">&gt; RESTART</button>
+  </div>
+</div>
+
+<div class="screen-flash" id="screen-flash"></div>
+
+<script>
+  const grid = document.getElementById('grid');
+  const BEST_KEY = '1to30-best';
+
+  const state = {
+    next: 1,
+    startTime: null,
+    rafId: null,
+    ended: false,
+  };
+
+  function loadBest() {
+    try {
+      const v = localStorage.getItem(BEST_KEY);
+      return v === null ? null : Number(v);
+    } catch (e) { return null; }
+  }
+  function saveBest(seconds) {
+    try { localStorage.setItem(BEST_KEY, seconds.toFixed(2)); } catch (e) {}
+  }
+  function fmtSec(seconds) {
+    return seconds.toFixed(2).padStart(5, '0');
+  }
+  const ui = {
+    status: document.getElementById('status'),
+    nextLabel: document.getElementById('next-label'),
+    nextNum: document.getElementById('next-num'),
+    time: document.getElementById('time'),
+    best: document.getElementById('best'),
+  };
+  const initialBest = loadBest();
+  if (initialBest !== null) ui.best.textContent = fmtSec(initialBest);
+
+  const modal = {
+    root: document.getElementById('modal'),
+    card: document.getElementById('modal-card'),
+    tag: document.getElementById('modal-tag'),
+    title: document.getElementById('modal-title'),
+    meta: document.getElementById('modal-meta'),
+    btn: document.getElementById('modal-btn'),
+  };
+  const gridFrame = document.querySelector('.grid-frame');
+
+  function showFailModal(expected, received) {
+    modal.root.classList.remove('success');
+    modal.tag.textContent = '// FAULT DETECTED';
+    modal.title.textContent = '[!] SEQUENCE BREACH';
+    modal.meta.innerHTML = `EXPECTED: <b>${String(expected).padStart(2,'0')}</b> · RECEIVED: <b>${String(received).padStart(2,'0')}</b>`;
+    modal.btn.textContent = '> RESTART';
+    modal.root.hidden = false;
+  }
+
+  function showClearModal(elapsed, isRecord, prevBest) {
+    modal.root.classList.add('success');
+    modal.tag.textContent = '// MISSION COMPLETE';
+    modal.title.textContent = '>> ALL CLEAR';
+    const prevLine = prevBest === null
+      ? 'PREV BEST: --.-- &nbsp;→&nbsp; THIS RUN: ' + fmtSec(elapsed)
+      : 'PREV BEST: ' + fmtSec(prevBest) + ' &nbsp;→&nbsp; THIS RUN: ' + fmtSec(elapsed);
+    modal.meta.innerHTML = `
+      <div class="modal-time">${fmtSec(elapsed)}<span class="modal-time-unit"> SEC</span></div>
+      ${isRecord ? '<div class="modal-record blink">[NEW RECORD]</div>' : ''}
+      <div style="margin-top:14px; font-size:11px; color:var(--text-meta); letter-spacing:.08em;">${prevLine}</div>
+    `;
+    modal.btn.textContent = '> RUN AGAIN';
+    modal.root.hidden = false;
+  }
+
+  function resetGame() {
+    state.next = 1;
+    state.startTime = null;
+    state.ended = false;
+    stopTimer();
+    ui.time.textContent = '00.00';
+    ui.status.hidden = false;
+    ui.nextLabel.hidden = true;
+    modal.root.hidden = true;
+    renderGrid(shuffleNumbers());
+    markNextTarget();
+  }
+
+  modal.btn.addEventListener('click', resetGame);
+
+  const screenFlashEl = document.getElementById('screen-flash');
+  function flashScreen() {
+    screenFlashEl.classList.remove('active');
+    void screenFlashEl.offsetWidth;
+    screenFlashEl.classList.add('active');
+  }
+
+  function updateNextHud() {
+    if (state.next > 30 || state.ended) {
+      ui.nextLabel.hidden = true;
+      return;
+    }
+    if (state.startTime !== null) {
+      ui.status.hidden = true;
+      ui.nextLabel.hidden = false;
+      ui.nextNum.textContent = String(state.next).padStart(2, '0');
+    }
+  }
+  function markNextTarget() {
+    document.querySelectorAll('.cell.next').forEach((el) => el.classList.remove('next'));
+    if (state.ended || state.next > 30) return;
+    document.querySelectorAll('.cell').forEach((cell) => {
+      if (Number(cell.dataset.value) === state.next && !cell.classList.contains('cleared')) {
+        cell.classList.add('next');
+      }
+    });
+  }
+  function tickTime() {
+    if (state.startTime === null || state.ended) return;
+    const elapsed = (Date.now() - state.startTime) / 1000;
+    ui.time.textContent = fmtSec(elapsed);
+    state.rafId = requestAnimationFrame(tickTime);
+  }
+  function stopTimer() {
+    if (state.rafId !== null) {
+      cancelAnimationFrame(state.rafId);
+      state.rafId = null;
+    }
+  }
+
+  function shuffleNumbers() {
+    const nums = Array.from({ length: 30 }, (_, i) => i + 1);
+    for (let i = nums.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [nums[i], nums[j]] = [nums[j], nums[i]];
+    }
+    return nums;
+  }
+
+  function handleCellClick(e) {
+    if (state.ended) return;
+    const cell = e.currentTarget;
+    if (cell.classList.contains('cleared')) return;
+    const value = Number(cell.dataset.value);
+
+    if (value !== state.next) {
+      state.ended = true;
+      stopTimer();
+      markNextTarget();
+      gridFrame.classList.remove('shaking');
+      void gridFrame.offsetWidth;
+      gridFrame.classList.add('shaking');
+      setTimeout(() => showFailModal(state.next, value), 350);
+      return;
+    }
+
+    if (state.next === 1) {
+      state.startTime = Date.now();
+      tickTime();
+      flashScreen();
+    }
+
+    cell.classList.add('cleared');
+    cell.classList.add('flash');
+    setTimeout(() => cell.classList.remove('flash'), 180);
+    state.next += 1;
+    updateNextHud();
+    markNextTarget();
+
+    if (state.next > 30) {
+      state.ended = true;
+      stopTimer();
+      markNextTarget();
+      const elapsed = (Date.now() - state.startTime) / 1000;
+      const prevBest = loadBest();
+      const isRecord = prevBest === null || elapsed < prevBest;
+      if (isRecord) {
+        saveBest(elapsed);
+        ui.best.textContent = fmtSec(elapsed);
+      }
+      gridFrame.classList.remove('sweep');
+      void gridFrame.offsetWidth;
+      gridFrame.classList.add('sweep');
+      setTimeout(() => showClearModal(elapsed, isRecord, prevBest), 300);
+    }
+  }
+
+  function renderGrid(nums) {
+    grid.innerHTML = '';
+    nums.forEach((n, idx) => {
+      const cell = document.createElement('button');
+      cell.className = 'cell';
+      cell.dataset.value = n;
+      const span = document.createElement('span');
+      span.className = 'digit';
+      span.textContent = n;
+      cell.appendChild(span);
+      cell.classList.add('boot');
+      cell.style.animationDelay = (idx * 8) + 'ms';
+      cell.addEventListener('click', handleCellClick);
+      grid.appendChild(cell);
+    });
+  }
+
+  renderGrid(shuffleNumbers());
+  markNextTarget();
+</script>
+
+</body>
+</html>
