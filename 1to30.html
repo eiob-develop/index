@@ -37,6 +37,7 @@
   .top-bar {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 24px;
     padding: 14px 20px;
     border-bottom: 1px solid rgba(243,156,18,0.12);
@@ -51,7 +52,6 @@
   }
   .home-link:hover { color: var(--accent); }
 
-  .top-bar { flex-wrap: wrap; }
   .hud-label, .hud-time {
     font-size: 12px;
     letter-spacing: 0.08em;
@@ -138,6 +138,10 @@
     user-select: none;
     transition: background .12s, border-color .12s, color .12s;
   }
+  .cell:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
   .corner {
     position: absolute;
     width: 10px;
@@ -154,15 +158,23 @@
   .cell.cleared {
     background: var(--bg-cell-cleared);
     border-color: rgba(255,255,255,0.04);
-    color: var(--accent-dim);
+    color: var(--text-muted);
     cursor: default;
+    position: relative;
+  }
+  .cell.cleared > .digit {
+    color: var(--text-muted);
+    opacity: 0.55;
   }
   .cell.cleared::after {
     content: '✓';
-    font-size: 0.4em;
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    font-size: 10px;
+    line-height: 1;
     color: var(--accent-dim);
   }
-  .cell.cleared > .digit { display: none; }
 
   @keyframes pulseGlow {
     0%, 100% {
@@ -250,9 +262,11 @@
     cursor: pointer;
     transition: border-color .2s, color .2s;
   }
-  .modal-btn:hover {
+  .modal-btn:hover,
+  .modal-btn:focus-visible {
     border-color: var(--accent);
     color: var(--accent);
+    outline: none;
   }
   @keyframes fadeIn {
     from { opacity: 0; }
@@ -345,7 +359,7 @@
   <a href="index.html" class="home-link">← HOME</a>
   <span class="hud-label" id="status">// SYSTEM ARMED</span>
   <span class="hud-label" id="next-label" hidden>// NEXT: <b id="next-num">01</b></span>
-  <span class="hud-time">T+ <b id="time">00.00</b></span>
+  <span class="hud-time" aria-live="off">T+ <b id="time">00.00</b></span>
   <span class="hud-label hud-best">// BEST: <b id="best">--.--</b></span>
 </div>
 
@@ -369,7 +383,7 @@
   </div>
 </main>
 
-<div class="modal" id="modal" hidden>
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modal-title">
   <div class="modal-card" id="modal-card">
     <span class="modal-tag" id="modal-tag">// FAULT DETECTED</span>
     <h2 class="modal-title" id="modal-title">[!] SEQUENCE BREACH</h2>
@@ -383,6 +397,10 @@
 <script>
   const grid = document.getElementById('grid');
   const BEST_KEY = '1to30-best';
+  const REDUCED_MOTION = window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const FAIL_DELAY = REDUCED_MOTION ? 0 : 350;
+  const CLEAR_DELAY = REDUCED_MOTION ? 0 : 300;
 
   const state = {
     next: 1,
@@ -430,6 +448,10 @@
     modal.meta.innerHTML = `EXPECTED: <b>${String(expected).padStart(2,'0')}</b> · RECEIVED: <b>${String(received).padStart(2,'0')}</b>`;
     modal.btn.textContent = '> RESTART';
     modal.root.hidden = false;
+    ui.status.hidden = false;
+    ui.status.textContent = '// SHUTDOWN';
+    ui.status.style.color = 'var(--danger)';
+    modal.btn.focus();
   }
 
   function showClearModal(elapsed, isRecord, prevBest) {
@@ -446,6 +468,10 @@
     `;
     modal.btn.textContent = '> RUN AGAIN';
     modal.root.hidden = false;
+    ui.status.hidden = false;
+    ui.status.textContent = '// MISSION COMPLETE';
+    ui.status.style.color = 'var(--success)';
+    modal.btn.focus();
   }
 
   function resetGame() {
@@ -455,6 +481,8 @@
     stopTimer();
     ui.time.textContent = '00.00';
     ui.status.hidden = false;
+    ui.status.textContent = '// SYSTEM ARMED';
+    ui.status.style.color = '';
     ui.nextLabel.hidden = true;
     modal.root.hidden = true;
     renderGrid(shuffleNumbers());
@@ -492,7 +520,7 @@
   }
   function tickTime() {
     if (state.startTime === null || state.ended) return;
-    const elapsed = (Date.now() - state.startTime) / 1000;
+    const elapsed = (performance.now() - state.startTime) / 1000;
     ui.time.textContent = fmtSec(elapsed);
     state.rafId = requestAnimationFrame(tickTime);
   }
@@ -525,12 +553,12 @@
       gridFrame.classList.remove('shaking');
       void gridFrame.offsetWidth;
       gridFrame.classList.add('shaking');
-      setTimeout(() => showFailModal(state.next, value), 350);
+      setTimeout(() => showFailModal(state.next, value), FAIL_DELAY);
       return;
     }
 
     if (state.next === 1) {
-      state.startTime = Date.now();
+      state.startTime = performance.now();
       tickTime();
       flashScreen();
     }
@@ -546,7 +574,7 @@
       state.ended = true;
       stopTimer();
       markNextTarget();
-      const elapsed = (Date.now() - state.startTime) / 1000;
+      const elapsed = (performance.now() - state.startTime) / 1000;
       const prevBest = loadBest();
       const isRecord = prevBest === null || elapsed < prevBest;
       if (isRecord) {
@@ -556,7 +584,7 @@
       gridFrame.classList.remove('sweep');
       void gridFrame.offsetWidth;
       gridFrame.classList.add('sweep');
-      setTimeout(() => showClearModal(elapsed, isRecord, prevBest), 300);
+      setTimeout(() => showClearModal(elapsed, isRecord, prevBest), CLEAR_DELAY);
     }
   }
 
